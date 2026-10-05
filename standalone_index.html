@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Catatan Keuangan &amp; Periode Anggaran</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg: #f5f6fa;
+    --card: #ffffff;
+    --primary: #2f6f4f;
+    --primary-dark: #235c3f;
+    --primary-light: #e8f5ec;
+    --danger: #c0392b;
+    --danger-light: #fde8e8;
+    --warn: #b7791f;
+    --warn-light: #fef3c7;
+    --info: #2563eb;
+    --info-light: #eff6ff;
+    --text: #222;
+    --muted: #777;
+    --border: #e2e5ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  h2 { font-size: 1.05rem; margin: 0 0 10px; display: flex; align-items: center; justify-content: space-between; }
+  .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+  .card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid rgba(0,0,0,0.04);
+  }
+  label { display: block; font-size: 0.82rem; color: var(--muted); margin: 10px 0 4px; font-weight: 500; }
+  input, select, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    background: #fff;
+    color: var(--text);
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(47, 111, 79, 0.15);
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    transition: all 0.15s ease;
+  }
+  .btn-primary {
+    background: var(--primary);
+    color: #fff;
+    width: 100%;
+    padding: 12px;
+    font-weight: 600;
+    margin-top: 12px;
+  }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-sm { padding: 6px 12px; font-size: 0.82rem; font-weight: 600; border-radius: 6px; }
+  .btn-flat { background: #eef1f5; color: #444; }
+  .btn-flat:hover { background: #dfe3e8; }
+  .btn-link { background: transparent; color: var(--muted); padding: 4px 6px; font-size: 0.8rem; }
+  .btn-link:hover { color: var(--text); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-pill { border-radius: 20px; padding: 4px 10px; font-size: 0.78rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+  .pill-active { background: var(--primary-light); color: var(--primary); }
+  .pill-warn { background: var(--warn-light); color: var(--warn); }
+  
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    text-align: center;
+  }
+  .summary-grid.two-cols { grid-template-columns: repeat(2, 1fr); }
+  .summary-grid.four-cols { grid-template-columns: repeat(2, 1fr); }
+  @media(min-width: 480px) {
+    .summary-grid.four-cols { grid-template-columns: repeat(4, 1fr); }
+  }
+  .num { font-size: 1.15rem; font-weight: 700; }
+  .lbl { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; margin-top: 3px; letter-spacing: 0.4px; }
+  .amt-out { color: var(--danger); }
+  .amt-in { color: var(--primary); }
+  .amt-save { color: var(--info); }
+  
+  .tx {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.92rem;
+  }
+  .tx:last-child { border-bottom: none; }
+  .tx-main { flex: 1; min-width: 0; padding-right: 8px; }
+  .tx-cat { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+  .tx-user { font-size: 0.7rem; color: #999; }
+  .tx-amt { font-weight: 600; white-space: nowrap; }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-btn {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    background: #eef1f5;
+    color: #555;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  .tab-btn.active { background: var(--primary); color: #fff; font-weight: 600; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .err { color: var(--danger); font-size: 0.82rem; margin-top: 8px; }
+  
+  /* Tables */
+  .table-scroll { overflow-x: auto; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 0.76rem; text-transform: uppercase; }
+  td:last-child, th:last-child { text-align: right; }
+  .bar-bg { background: #eef1f5; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .bar-fill { background: var(--primary); height: 100%; transition: width 0.3s; }
+  .bar-fill.over { background: var(--danger); }
+  .budget-input { width: 100px; padding: 4px 6px; font-size: 0.82rem; text-align: right; }
+
+  /* Periode banner */
+  .periode-badge {
+    background: var(--primary-light);
+    border: 1px solid rgba(47,111,79,0.2);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .periode-title { font-weight: 700; color: var(--primary-dark); font-size: 0.95rem; }
+  .periode-meta { font-size: 0.78rem; color: #4b6b58; margin-top: 2px; }
+
+  .chart-box { position: relative; height: 260px; margin-top: 10px; }
+  .chart-box.tall { height: 320px; }
+  .inline-add { display: flex; gap: 8px; margin-top: 12px; }
+  
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box {
+    background: #fff; width: 100%; max-width: 480px; border-radius: 14px;
+    padding: 20px; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  }
+  .code-block {
+    background: #1e293b; color: #f1f5f9; padding: 12px; border-radius: 8px;
+    font-family: monospace; font-size: 0.78rem; overflow-x: auto; white-space: pre-wrap; margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- AUTH / LOGIN -->
+  <div id="auth-panel" style="display:none;">
+    <div class="card" style="text-align:center; padding: 28px 20px;">
+      <h1>Catatan Keuangan &amp; Periode</h1>
+      <div class="sub">Masuk untuk mencatat transaksi dan memantau periode anggaran</div>
+      <label style="text-align:left;">Email</label>
+      <input id="login-email" type="email" placeholder="nama@email.com" />
+      <label style="text-align:left;">Password</label>
+      <input id="login-password" type="password" />
+      <button class="btn-primary" onclick="doLogin()">Masuk</button>
+      <div id="login-err" class="err"></div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="app">
+    <div class="topbar">
+      <div>
+        <h1>Catatan Keuangan</h1>
+        <div class="sub" id="whoami" style="margin-bottom:0;">Memuat sesi...</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-sm btn-flat" onclick="switchTab('periode')">⚙️ Periode</button>
+        <button class="btn-link" onclick="doLogout()">Keluar</button>
+      </div>
+    </div>
+
+    <!-- TABS NAVIGATION -->
+    <div class="tabs">
+      <button class="tab-btn active" id="tabbtn-input" onclick="switchTab('input')">Input</button>
+      <button class="tab-btn" id="tabbtn-transaksi" onclick="switchTab('transaksi')">Data Transaksi</button>
+      <button class="tab-btn" id="tabbtn-periode" onclick="switchTab('periode')">📅 Periode</button>
+      <button class="tab-btn" id="tabbtn-anggaran" onclick="switchTab('anggaran')">Anggaran</button>
+      <button class="tab-btn" id="tabbtn-dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+      <button class="tab-btn" id="tabbtn-ringkasan" onclick="switchTab('ringkasan')">Ringkasan</button>
+      <button class="tab-btn" id="tabbtn-master" onclick="switchTab('master')">Master Data</button>
+      <button class="tab-btn" id="tabbtn-netlify" onclick="switchTab('netlify')">🚀 Deploy Netlify</button>
+    </div>
+
+    <!-- TAB: INPUT -->
+    <div class="tab-panel active" id="tab-input">
+      <!-- Periode Berjalan Banner -->
+      <div class="periode-badge" id="badge-active-period">
+        <div>
+          <div class="periode-title" id="badge-period-name">Periode Berjalan</div>
+          <div class="periode-meta" id="badge-period-detail">Memuat siklus gajian...</div>
+        </div>
+        <button class="btn-sm btn-flat" onclick="switchTab('periode')">Atur</button>
+      </div>
+
+      <div class="card">
+        <div class="sub" style="margin-bottom:10px;">Ringkasan Periode Aktif</div>
+        <div class="summary-grid">
+          <div><div class="num amt-out" id="sum-out">Rp0</div><div class="lbl">Pengeluaran</div></div>
+          <div><div class="num amt-in" id="sum-in">Rp0</div><div class="lbl">Pemasukan</div></div>
+          <div><div class="num amt-save" id="sum-save">Rp0</div><div class="lbl">Saving/Invest</div></div>
+        </div>
+        <div id="sum-surplus-box" style="margin-top:12px; padding:10px 14px; border-radius:10px; font-size:0.85rem; display:flex; justify-content:space-between; align-items:center; background:#e8f5ec; border:1px solid #bbf7d0;">
+          <div>
+            <div style="font-weight:700; color:#14532d;" id="sum-surplus-label">🟢 SURPLUS ARUS KAS</div>
+            <div style="font-size:0.75rem; color:#4b6b58;" id="sum-surplus-desc">Pemasukan lebih besar dari pengeluaran</div>
+          </div>
+          <div style="font-weight:800; font-size:1.1rem; color:#14532d;" id="sum-surplus-val">+Rp0</div>
+        </div>
+        <div class="row" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:0.82rem; color:var(--muted); justify-content:space-between;">
+          <div>Sisa Anggaran: <b id="sum-sisa" style="color:var(--text);">Rp0</b></div>
+          <div>Kuota Harian Aman: <b id="sum-kuota-harian" style="color:var(--primary);">Rp0/hari</b></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub" style="margin-bottom:2px;">Tambah transaksi baru</div>
+        <label>Tanggal</label>
+        <input id="f-tanggal" type="date" />
+        <label>Item / Keterangan</label>
+        <input id="f-item" type="text" placeholder="Contoh: Makan siang, Kopi, Gaji Bulanan..." />
+        <div class="row">
+          <div>
+            <label>Kategori</label>
+            <select id="f-kategori"></select>
+          </div>
+          <div>
+            <label>Tipe</label>
+            <select id="f-tipe"></select>
+          </div>
+        </div>
+        <label>Jumlah (Rp)</label>
+        <input id="f-jumlah" type="text" inputmode="numeric" placeholder="0" oninput="formatRibuanInput(this)" />
+        <label>Catatan (opsional)</label>
+        <input id="f-catatan" type="text" placeholder="Catatan tambahan..." />
+        <button class="btn-primary" onclick="addTransaksi()">Simpan Transaksi</button>
+        <div id="form-err" class="err"></div>
+      </div>
+
+      <div class="card">
+        <div class="sub" style="margin-bottom:6px;">Transaksi terbaru</div>
+        <div id="tx-list"></div>
+      </div>
+    </div>
+
+    <!-- TAB: PERIODE (FITUR BARU) -->
+    <div class="tab-panel" id="tab-periode">
+      <div class="card" style="background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%); border-left: 4px solid var(--primary);">
+        <h2>
+          <span>Siklus Periode Anggaran</span>
+          <span class="btn-pill pill-active" id="period-status-pill">Aktif Berjalan</span>
+        </h2>
+        <div class="sub" style="margin-bottom:12px;">
+          Periode dihitung dari <b>tanggal gajian terakhir</b> sampai <b>hari ini</b> (1 periode pengeluaran &amp; anggaran), persis seperti bot pengeluaran WhatsApp.
+        </div>
+
+        <div class="summary-grid four-cols" style="margin-top:14px;">
+          <div><div class="num" id="p-days-passed">0</div><div class="lbl">Hari Berjalan</div></div>
+          <div><div class="num" id="p-days-left">0</div><div class="lbl">Sisa Hari s/d Gajian</div></div>
+          <div><div class="num amt-out" id="p-avg-burn">Rp0</div><div class="lbl">Rata-rata/Hari</div></div>
+          <div><div class="num amt-in" id="p-safe-quota">Rp0</div><div class="lbl">Kuota Aman/Hari</div></div>
+        </div>
+      </div>
+
+      <!-- Konteks & Pengaturan Periode -->
+      <div class="card">
+        <h2>Atur Konteks &amp; Aturan Periode</h2>
+        <label>Mode Penentuan Periode</label>
+        <select id="setting-periode-mode" onchange="savePeriodeSettings()">
+          <option value="auto_salary">Otomatis Deteksi Transaksi Gajian Terakhir (Rekomendasi)</option>
+          <option value="fixed_day">Tanggal Gajian Rutin Tetap Setiap Bulan</option>
+          <option value="custom">Kustom / Manual</option>
+        </select>
+
+        <div id="fixed-day-config" style="margin-top:10px;">
+          <label>Tanggal Cutoff Gajian Setiap Bulan (1 - 31)</label>
+          <input id="setting-cutoff-day" type="number" min="1" max="31" value="25" onchange="savePeriodeSettings()" />
+          <div class="sub" style="margin-top:4px;">Contoh: 25 berarti periode berjalan dari tanggal 25 s/d 24 bulan berikutnya.</div>
+        </div>
+
+        <div style="margin-top:10px;">
+          <label>Kata Kunci Item Pemasukan Gaji (Pisahkan dengan koma)</label>
+          <input id="setting-keywords" type="text" value="gaji, gajian, payroll, salary" onchange="savePeriodeSettings()" />
+          <div class="sub" style="margin-top:4px;">Transaksi pemasukan dengan nama ini otomatis dijadikan awal periode baru.</div>
+        </div>
+
+        <button class="btn-sm btn-primary" onclick="recalculatePeriods()">Terapkan &amp; Hitung Ulang Periode</button>
+      </div>
+
+      <!-- Riwayat Periode -->
+      <div class="card">
+        <h2>Riwayat &amp; Pilihan Periode</h2>
+        <div class="sub" style="margin-bottom:10px;">Pilih periode untuk melihat anggaran, transaksi, dan dashboard pada siklus tersebut:</div>
+        <div id="periode-history-list"></div>
+      </div>
+    </div>
+
+    <!-- TAB: ANGGARAN -->
+    <div class="tab-panel" id="tab-anggaran">
+      <div class="card">
+        <label>Pilih Periode Anggaran</label>
+        <select id="anggaran-period-select" onchange="handleAnggaranPeriodChange()"></select>
+        <div class="sub" id="anggaran-period-info" style="margin-top:4px; margin-bottom:0;"></div>
+      </div>
+
+      <div class="card">
+        <div class="sub" style="margin-bottom:10px;">Ringkasan Realisasi Periode Terpilih</div>
+        <div class="summary-grid">
+          <div><div class="num amt-in" id="ang-pemasukan">Rp0</div><div class="lbl">Pemasukan</div></div>
+          <div><div class="num amt-out" id="ang-pengeluaran">Rp0</div><div class="lbl">Pengeluaran</div></div>
+          <div><div class="num amt-save" id="ang-ditabung">Rp0</div><div class="lbl">Ditabung/Invest</div></div>
+        </div>
+        <div class="summary-grid two-cols" style="margin-top:12px;">
+          <div><div class="num" id="ang-sisa">Rp0</div><div class="lbl">Sisa Belum Teralokasi</div></div>
+          <div><div class="num" id="ang-rasio">0%</div><div class="lbl">Rasio Tabungan</div></div>
+        </div>
+        <div id="ang-surplus-box" style="margin-top:12px; padding:10px 14px; border-radius:10px; font-size:0.85rem; display:flex; justify-content:space-between; align-items:center; background:#e8f5ec; border:1px solid #bbf7d0;">
+          <div>
+            <div style="font-weight:700; color:#14532d;" id="ang-surplus-label">🟢 SURPLUS ARUS KAS PERIODE</div>
+            <div style="font-size:0.75rem; color:#4b6b58;" id="ang-surplus-desc">Pemasukan vs Pengeluaran periode ini</div>
+          </div>
+          <div style="font-weight:800; font-size:1.1rem; color:#14532d;" id="ang-surplus-val">+Rp0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Pemasukan Rutin</h2>
+        <div id="pemasukan-list"></div>
+        <div class="inline-add">
+          <input id="new-sumber" placeholder="Sumber (mis. Gaji Mas Icus, Gaji Eva)" />
+          <input id="new-jumlah-masuk" type="number" placeholder="Jumlah" style="max-width:140px;" />
+          <button class="btn-sm btn-primary" style="width:auto; margin-top:0;" onclick="addPemasukan()">+</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Anggaran vs Realisasi</h2>
+        <div class="sub" style="margin-top:-6px;">Ubah nilai di kolom Anggaran untuk menyesuaikan plafon budget. Perubahan otomatis tersimpan.</div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Kategori</th><th>Anggaran</th><th>Realisasi</th><th>Sisa</th></tr></thead>
+            <tbody id="anggaran-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Target Tabungan &amp; Investasi</h2>
+        <label>Target per periode (Rp)</label>
+        <input id="target-saving" type="number" onchange="updateTargetSaving()" />
+        <div class="sub" style="margin-top:10px;">Realisasi saving periode ini: <b id="target-realisasi">Rp0</b></div>
+      </div>
+    </div>
+
+    <!-- TAB: TRANSAKSI -->
+    <div class="tab-panel" id="tab-transaksi">
+      <div class="card">
+        <div class="sub" style="margin-bottom:6px;">Filter &amp; Pencarian</div>
+        <div class="row" style="margin-bottom:8px;">
+          <button class="btn-sm btn-flat" onclick="setTxFilterPeriod('active')">Periode Berjalan</button>
+          <button class="btn-sm btn-flat" onclick="setTxFilterPeriod('month')">Bulan Kalender</button>
+          <button class="btn-sm btn-flat" onclick="setTxFilterPeriod('all')">Semua</button>
+        </div>
+        <div class="row">
+          <div>
+            <label>Dari tanggal</label>
+            <input id="tx-filter-dari" type="date" />
+          </div>
+          <div>
+            <label>Sampai tanggal</label>
+            <input id="tx-filter-sampai" type="date" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Kategori</label>
+            <select id="tx-filter-kategori"><option value="">Semua kategori</option></select>
+          </div>
+          <div>
+            <label>Tipe</label>
+            <select id="tx-filter-tipe"><option value="">Semua tipe</option></select>
+          </div>
+        </div>
+        <label>Cari item</label>
+        <input id="tx-filter-search" type="text" placeholder="Contoh: Makan siang, Kopi..." />
+        <div class="row" style="margin-top:14px;">
+          <button class="btn-sm btn-flat" onclick="resetTxFilter()">Reset</button>
+          <button class="btn-sm btn-primary" style="margin-top:0;" onclick="loadTransaksiTab()">Terapkan Filter</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub" id="tx-full-count" style="margin-bottom:6px;">Daftar transaksi</div>
+        <div id="tx-full-list"></div>
+      </div>
+    </div>
+
+    <!-- TAB: DASHBOARD -->
+    <div class="tab-panel" id="tab-dashboard">
+      <div class="card">
+        <div class="sub" style="margin:0;">Grafik proporsi &amp; anggaran mengikuti periode yang sedang aktif di tab Anggaran/Periode.</div>
+      </div>
+      <div class="card">
+        <h2>Tren 6 Bulan Terakhir</h2>
+        <div class="chart-box"><canvas id="chart-trend"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Proporsi Pengeluaran per Kategori</h2>
+        <div class="chart-box tall"><canvas id="chart-pie"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Anggaran vs Realisasi</h2>
+        <div class="chart-box tall"><canvas id="chart-bar"></canvas></div>
+      </div>
+    </div>
+
+    <!-- TAB: RINGKASAN -->
+    <div class="tab-panel" id="tab-ringkasan">
+      <div class="card">
+        <h2>Ringkasan Bulanan (6 Bulan Terakhir)</h2>
+        <div class="table-scroll">
+          <table id="ringkasan-table"></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: MASTER DATA -->
+    <div class="tab-panel" id="tab-master">
+      <div class="card">
+        <h2>Master Kategori</h2>
+        <div class="sub" style="margin-top:-6px;">Atur nama dan kelompok anggaran. Kosongkan kelompok jika tidak dianggarkan.</div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Nama Kategori</th><th>Kelompok Anggaran</th><th></th></tr></thead>
+            <tbody id="master-kategori-body"></tbody>
+          </table>
+        </div>
+        <div class="inline-add">
+          <input id="new-kategori-nama" placeholder="Kategori baru" />
+          <input id="new-kategori-kelompok" placeholder="Kelompok anggaran (opsional)" />
+          <button class="btn-sm btn-primary" style="width:auto; margin-top:0;" onclick="addKategori()">+</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Master Tipe Transaksi</h2>
+        <div id="master-tipe-list"></div>
+        <div class="inline-add">
+          <input id="new-tipe-nama" placeholder="Tipe baru" />
+          <button class="btn-sm btn-primary" style="width:auto; margin-top:0;" onclick="addTipe()">+</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: DEPLOY NETLIFY (FITUR BARU) -->
+    <div class="tab-panel" id="tab-netlify">
+      <div class="card">
+        <h2>🚀 Deploy Otomatis ke Netlify</h2>
+        <div class="sub">
+          Aplikasi ini sudah disiapkan dengan file <code>netlify.toml</code> dan kode siap push ke repository GitHub kamu: <b>ikusmanuwu/efraterbaik</b>.
+        </div>
+        
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:14px;">
+          <div style="font-weight:600; font-size:0.9rem; margin-bottom:6px;">Langkah Men-trigger Deploy ke Netlify:</div>
+          <ol style="margin:0; padding-left:20px; font-size:0.85rem; line-height:1.6; color:#334155;">
+            <li>Salin file <b>netlify.toml</b> dan <b>index.html</b> ke repository lokal kamu.</li>
+            <li>Jalankan di terminal repository <code>efraterbaik</code>:
+              <div class="code-block">git add .
+git commit -m "feat: tambah periode anggaran siklus gajian & netlify deploy"
+git push origin main</div>
+            </li>
+            <li>Netlify akan mendeteksi commit baru secara otomatis dan men-deploy web app kamu dalam hitungan detik!</li>
+          </ol>
+        </div>
+
+        <div style="margin-top:16px;">
+          <div style="font-weight:600; font-size:0.88rem; margin-bottom:4px;">File netlify.toml:</div>
+          <div class="code-block">[build]
+  publish = "."
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200</div>
+          <button class="btn-sm btn-flat" style="margin-top:6px;" onclick="copyNetlifyToml()">📋 Salin netlify.toml</button>
+        </div>
+
+        <div style="margin-top:16px;">
+          <div style="font-weight:600; font-size:0.88rem; margin-bottom:4px;">Script SQL Supabase untuk Periode:</div>
+          <div class="sub" style="margin-bottom:6px;">(Opsional) Jalankan <code>supabase_periode.sql</code> di Supabase SQL Editor jika ingin menyimpan konfigurasi periode di database cloud.</div>
+          <button class="btn-sm btn-flat" onclick="copySqlPeriode()">📋 Salin supabase_periode.sql</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT TRANSAKSI -->
+  <div class="modal-overlay" id="edit-modal">
+    <div class="modal-box">
+      <h2>Edit Transaksi</h2>
+      <label>Tanggal</label>
+      <input id="e-tanggal" type="date" />
+      <label>Item / Keterangan</label>
+      <input id="e-item" type="text" />
+      <div class="row">
+        <div>
+          <label>Kategori</label>
+          <select id="e-kategori"></select>
+        </div>
+        <div>
+          <label>Tipe</label>
+          <select id="e-tipe"></select>
+        </div>
+      </div>
+      <label>Jumlah (Rp)</label>
+      <input id="e-jumlah" type="number" min="0" step="1" />
+      <label>Catatan (opsional)</label>
+      <input id="e-catatan" type="text" />
+      <div id="edit-err" class="err"></div>
+      <div class="row" style="margin-top:16px;">
+        <button class="btn-sm btn-flat" onclick="closeEditModal()">Batal</button>
+        <button class="btn-sm btn-primary" style="margin-top:0;" onclick="saveEditTransaksi()">Simpan Perubahan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Master Data
+let KATEGORI_LIST = [];
+let TIPE_LIST = [];
+let MASTER_KATEGORI = [];
+let MASTER_TIPE = [];
+let ALL_TRANSAKSI = [];
+let COMPUTED_PERIODS = [];
+let ACTIVE_PERIOD = null;
+let SELECTED_PERIOD = null;
+
+// Settings Periode
+let PERIODE_SETTINGS = {
+  mode: localStorage.getItem("efrat_period_mode") || "auto_salary",
+  cutoff_day: parseInt(localStorage.getItem("efrat_period_cutoff") || "25", 10),
+  keywords: localStorage.getItem("efrat_period_keywords") || "gaji, gajian, payroll, salary"
+};
+
+const BULAN_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const CHART_COLORS = ["#2f6f4f", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b", "#84cc16", "#06b6d4"];
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function fmtRp(n) {
+  return "Rp" + Math.round(n || 0).toLocaleString("id-ID");
+}
+
+function parseRibuan(value) {
+  return parseFloat(String(value || "").replace(/\./g, "")) || 0;
+}
+
+function formatRibuanInput(el) {
+  const cursorFromEnd = el.value.length - el.selectionEnd;
+  const digits = el.value.replace(/\D/g, "");
+  el.value = digits ? Number(digits).toLocaleString("id-ID") : "";
+  const pos = el.value.length - cursorFromEnd;
+  el.setSelectionRange(pos, pos);
+}
+
+function fmtDateIndo(dStr) {
+  if (!dStr) return "-";
+  const [y, m, d] = dStr.split("-");
+  return `${parseInt(d, 10)} ${BULAN_ID[parseInt(m, 10) - 1].slice(0, 3)} ${y}`;
+}
+
+function getTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function switchTab(name) {
+  const tabs = ["input","periode","anggaran","transaksi","dashboard","ringkasan","master","netlify"];
+  tabs.forEach(t => {
+    const p = document.getElementById("tab-" + t);
+    const b = document.getElementById("tabbtn-" + t);
+    if (p) p.classList.toggle("active", t === name);
+    if (b) b.classList.toggle("active", t === name);
+  });
+
+  if (name === "input") loadInputTab();
+  if (name === "periode") loadPeriodeTab();
+  if (name === "anggaran") loadAnggaranTab();
+  if (name === "transaksi") loadTransaksiTab();
+  if (name === "dashboard") loadDashboardTab();
+  if (name === "ringkasan") loadRingkasanTab();
+  if (name === "master") loadMasterTab();
+}
+
+// ---------- PERIODE LOGIC (Siklus Gajian & Konteks) ----------
+function isSalaryTx(tx) {
+  if (tx.tipe !== "Pemasukan") return false;
+  const kwList = PERIODE_SETTINGS.keywords.toLowerCase().split(",").map(k => k.trim()).filter(Boolean);
+  const text = `${tx.item || ""} ${tx.kategori || ""} ${tx.catatan || ""}`.toLowerCase();
+  return kwList.some(k => text.includes(k));
+}
+
+function calculatePeriodsFromData() {
+  const today = getTodayStr();
+  const salaryTxs = ALL_TRANSAKSI.filter(isSalaryTx).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+  const periods = [];
+
+  if (PERIODE_SETTINGS.mode === "auto_salary" && salaryTxs.length > 0) {
+    // Mode Auto: Tanggal gajian terakhir sampai hari ini
+    const latestSalary = salaryTxs[0];
+    const active = {
+      id: "active-" + latestSalary.id,
+      nama: `Periode Berjalan (${fmtDateIndo(latestSalary.tanggal)} - Hari Ini)`,
+      mulai: latestSalary.tanggal,
+      selesai: today,
+      is_berjalan: true,
+      salary_item: latestSalary.item,
+      salary_amt: latestSalary.jumlah
+    };
+    periods.push(active);
+
+    // Periode lampau
+    for (let i = 0; i < salaryTxs.length; i++) {
+      const cur = salaryTxs[i];
+      if (i > 0) {
+        const nextSalDate = new Date(salaryTxs[i - 1].tanggal);
+        nextSalDate.setDate(nextSalDate.getDate() - 1);
+        const endStr = nextSalDate.toISOString().slice(0, 10);
+        periods.push({
+          id: "past-" + cur.id,
+          nama: `Periode ${fmtDateIndo(cur.tanggal)} - ${fmtDateIndo(endStr)}`,
+          mulai: cur.tanggal,
+          selesai: endStr,
+          is_berjalan: false,
+          salary_item: cur.item,
+          salary_amt: cur.jumlah
+        });
+      }
+    }
+  } else {
+    // Mode Fixed Cutoff (Default 25)
+    const cutoff = PERIODE_SETTINGS.cutoff_day || 25;
+    const now = new Date();
+    const curDay = now.getDate();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+
+    let startYear = curYear;
+    let startMonth = curDay >= cutoff ? curMonth : curMonth - 1;
+    if (startMonth < 0) { startMonth = 11; startYear--; }
+
+    const startDate = new Date(startYear, startMonth, cutoff);
+    const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}-${String(startDate.getDate()).padStart(2, "0")}`;
+
+    periods.push({
+      id: "active-fixed",
+      nama: `Periode Berjalan (${fmtDateIndo(startStr)} - Hari Ini)`,
+      mulai: startStr,
+      selesai: today,
+      is_berjalan: true,
+      salary_item: `Siklus tanggal ${cutoff}`
+    });
+
+    // 3 periode lampau
+    for (let i = 1; i <= 3; i++) {
+      const pStartDate = new Date(startYear, startMonth - i, cutoff);
+      const pEndDate = new Date(startYear, startMonth - i + 1, cutoff - 1);
+      const sStr = pStartDate.toISOString().slice(0, 10);
+      const eStr = pEndDate.toISOString().slice(0, 10);
+      periods.push({
+        id: "fixed-past-" + i,
+        nama: `Periode ${fmtDateIndo(sStr)} - ${fmtDateIndo(eStr)}`,
+        mulai: sStr,
+        selesai: eStr,
+        is_berjalan: false,
+        salary_item: `Siklus tanggal ${cutoff}`
+      });
+    }
+  }
+
+  COMPUTED_PERIODS = periods;
+  ACTIVE_PERIOD = periods.find(p => p.is_berjalan) || periods[0];
+  if (!SELECTED_PERIOD) SELECTED_PERIOD = ACTIVE_PERIOD;
+  updatePeriodSelects();
+}
+
+function updatePeriodSelects() {
+  const sel = document.getElementById("anggaran-period-select");
+  if (!sel) return;
+  sel.innerHTML = COMPUTED_PERIODS.map(p => 
+    `<option value="${p.id}" ${SELECTED_PERIOD && SELECTED_PERIOD.id === p.id ? "selected" : ""}>${p.nama}</option>`
+  ).join("");
+}
+
+function savePeriodeSettings() {
+  PERIODE_SETTINGS.mode = document.getElementById("setting-periode-mode").value;
+  PERIODE_SETTINGS.cutoff_day = parseInt(document.getElementById("setting-cutoff-day").value, 10) || 25;
+  PERIODE_SETTINGS.keywords = document.getElementById("setting-keywords").value.trim() || "gaji, gajian, payroll, salary";
+
+  localStorage.setItem("efrat_period_mode", PERIODE_SETTINGS.mode);
+  localStorage.setItem("efrat_period_cutoff", PERIODE_SETTINGS.cutoff_day);
+  localStorage.setItem("efrat_period_keywords", PERIODE_SETTINGS.keywords);
+
+  recalculatePeriods();
+}
+
+function recalculatePeriods() {
+  calculatePeriodsFromData();
+  loadInputTab();
+  loadPeriodeTab();
+  if (document.getElementById("tab-anggaran").classList.contains("active")) loadAnggaranTab();
+}
+
+// ---------- TAB PERIODE RENDER ----------
+async function loadPeriodeTab() {
+  document.getElementById("setting-periode-mode").value = PERIODE_SETTINGS.mode;
+  document.getElementById("setting-cutoff-day").value = PERIODE_SETTINGS.cutoff_day;
+  document.getElementById("setting-keywords").value = PERIODE_SETTINGS.keywords;
+
+  if (!ACTIVE_PERIOD) return;
+
+  const startD = new Date(ACTIVE_PERIOD.mulai);
+  const endD = new Date(ACTIVE_PERIOD.selesai);
+  const daysPassed = Math.max(1, Math.ceil(Math.abs(endD - startD) / (1000 * 60 * 60 * 24)) + 1);
+
+  // Next payday calculation
+  const nextPayday = new Date(startD.getFullYear(), startD.getMonth() + 1, PERIODE_SETTINGS.cutoff_day);
+  const today = new Date();
+  const diffNext = Math.ceil((nextPayday - today) / (1000 * 60 * 60 * 24));
+  const daysLeft = Math.max(0, diffNext);
+
+  // Sum transactions in active period
+  const txInPeriod = ALL_TRANSAKSI.filter(t => t.tanggal >= ACTIVE_PERIOD.mulai && t.tanggal <= ACTIVE_PERIOD.selesai);
+  let outSum = 0;
+  txInPeriod.forEach(t => { if (t.tipe === "Pengeluaran") outSum += Number(t.jumlah || 0); });
+
+  const avgBurn = Math.round(outSum / daysPassed);
+  
+  // Total budget
+  const { data: angRows } = await sb.from("anggaran").select("budget");
+  const totalBudget = (angRows || []).reduce((s, r) => s + Number(r.budget || 0), 0);
+  const sisa = Math.max(0, totalBudget - outSum);
+  const safeQuota = daysLeft > 0 ? Math.round(sisa / daysLeft) : 0;
+
+  document.getElementById("p-days-passed").textContent = daysPassed;
+  document.getElementById("p-days-left").textContent = daysLeft;
+  document.getElementById("p-avg-burn").textContent = fmtRp(avgBurn);
+  document.getElementById("p-safe-quota").textContent = fmtRp(safeQuota);
+
+  // List history
+  const listEl = document.getElementById("periode-history-list");
+  listEl.innerHTML = COMPUTED_PERIODS.map(p => {
+    const isAct = p.id === ACTIVE_PERIOD.id;
+    const txP = ALL_TRANSAKSI.filter(t => t.tanggal >= p.mulai && t.tanggal <= p.selesai);
+    let pIn = 0, pOut = 0;
+    txP.forEach(t => {
+      if (t.tipe === "Pengeluaran") pOut += Number(t.jumlah || 0);
+      else if (t.tipe === "Pemasukan") pIn += Number(t.jumlah || 0);
+    });
+    const pNet = pIn - pOut;
+    const isSurplus = pNet >= 0;
+    return `
+      <div class="tx" style="padding:12px 0;">
+        <div class="tx-main">
+          <div style="font-weight:600;">${p.nama} ${isAct ? '<span class="btn-pill pill-active">Berjalan</span>' : ''}</div>
+          <div class="tx-cat">${fmtDateIndo(p.mulai)} s/d ${fmtDateIndo(p.selesai)} · ${p.salary_item || ''}</div>
+          <div style="margin-top:4px; font-size:0.78rem;">
+            <span style="display:inline-block; padding:2px 8px; border-radius:6px; font-weight:700; ${isSurplus ? 'background:#e8f5ec; color:#14532d;' : 'background:#fde8e8; color:#7f1d1d;'}">
+              ${isSurplus ? '🟢 Surplus' : '🔴 Minus'} ${isSurplus ? '+' : '-'}${fmtRp(Math.abs(pNet))}
+            </span>
+            <span style="color:#666; margin-left:6px;">In: ${fmtRp(pIn)} | Out: ${fmtRp(pOut)}</span>
+          </div>
+        </div>
+        <div>
+          <button class="btn-sm btn-flat" onclick="selectPeriod('${p.id}')">Lihat Anggaran</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function selectPeriod(pId) {
+  const p = COMPUTED_PERIODS.find(x => x.id === pId);
+  if (p) {
+    SELECTED_PERIOD = p;
+    switchTab("anggaran");
+  }
+}
+
+function handleAnggaranPeriodChange() {
+  const selVal = document.getElementById("anggaran-period-select").value;
+  SELECTED_PERIOD = COMPUTED_PERIODS.find(p => p.id === selVal) || ACTIVE_PERIOD;
+  loadAnggaranTab();
+}
+
+// ---------- TAB INPUT ----------
+async function loadInputTab() {
+  if (!ACTIVE_PERIOD) calculatePeriodsFromData();
+
+  // Update badge
+  document.getElementById("badge-period-name").textContent = ACTIVE_PERIOD ? ACTIVE_PERIOD.nama : "Periode Berjalan";
+  if (ACTIVE_PERIOD) {
+    document.getElementById("badge-period-detail").textContent = `${fmtDateIndo(ACTIVE_PERIOD.mulai)} s/d ${fmtDateIndo(ACTIVE_PERIOD.selesai)} · Dihitung dari gajian terakhir`;
+  }
+
+  // Load summary for active period
+  const start = ACTIVE_PERIOD ? ACTIVE_PERIOD.mulai : getTodayStr();
+  const end = ACTIVE_PERIOD ? ACTIVE_PERIOD.selesai : getTodayStr();
+
+  const { data: rows } = await sb.from("transaksi")
+    .select("tipe, kategori, jumlah")
+    .gte("tanggal", start)
+    .lte("tanggal", end);
+
+  let outTotal = 0, inTotal = 0, saveTotal = 0;
+  (rows || []).forEach(r => {
+    const amt = Number(r.jumlah || 0);
+    if (r.tipe === "Pengeluaran") outTotal += amt;
+    else if (r.tipe === "Pemasukan") inTotal += amt;
+    else if (r.tipe === "Saving/Invest" || r.kategori === "Invest") saveTotal += amt;
+  });
+
+  document.getElementById("sum-out").textContent = fmtRp(outTotal);
+  document.getElementById("sum-in").textContent = fmtRp(inTotal);
+  document.getElementById("sum-save").textContent = fmtRp(saveTotal);
+
+  // Status Surplus / Defisit
+  const net = inTotal - outTotal;
+  const isSurplus = net >= 0;
+  const sBox = document.getElementById("sum-surplus-box");
+  const sLbl = document.getElementById("sum-surplus-label");
+  const sVal = document.getElementById("sum-surplus-val");
+  const sDesc = document.getElementById("sum-surplus-desc");
+  if (sBox && sLbl && sVal) {
+    if (isSurplus) {
+      sBox.style.background = "#e8f5ec";
+      sBox.style.borderColor = "#bbf7d0";
+      sLbl.style.color = "#14532d";
+      sLbl.textContent = "🟢 SURPLUS ARUS KAS";
+      sVal.style.color = "#14532d";
+      sVal.textContent = "+" + fmtRp(net);
+      if (sDesc) sDesc.textContent = `Pemasukan (${fmtRp(inTotal)}) > Pengeluaran (${fmtRp(outTotal)})`;
+    } else {
+      sBox.style.background = "#fde8e8";
+      sBox.style.borderColor = "#fecaca";
+      sLbl.style.color = "#7f1d1d";
+      sLbl.textContent = "🔴 DEFISIT / MINUS";
+      sVal.style.color = "#7f1d1d";
+      sVal.textContent = "-" + fmtRp(Math.abs(net));
+      if (sDesc) sDesc.textContent = `Pengeluaran (${fmtRp(outTotal)}) > Pemasukan (${fmtRp(inTotal)})`;
+    }
+  }
+
+  // Sisa anggaran & kuota
+  const { data: angData } = await sb.from("anggaran").select("budget");
+  const totalBudget = (angData || []).reduce((s, r) => s + Number(r.budget || 0), 0);
+  const sisa = totalBudget - outTotal;
+  document.getElementById("sum-sisa").textContent = fmtRp(sisa);
+
+  // Next payday days left
+  if (ACTIVE_PERIOD) {
+    const startD = new Date(ACTIVE_PERIOD.mulai);
+    const nextPayday = new Date(startD.getFullYear(), startD.getMonth() + 1, PERIODE_SETTINGS.cutoff_day);
+    const diffNext = Math.max(1, Math.ceil((nextPayday - new Date()) / (1000 * 60 * 60 * 24)));
+    const quota = sisa > 0 ? Math.round(sisa / diffNext) : 0;
+    document.getElementById("sum-kuota-harian").textContent = fmtRp(quota) + "/hari";
+  }
+
+  // Recent transactions
+  loadRecentTx();
+}
+
+async function loadRecentTx() {
+  const { data: recent } = await sb.from("transaksi")
+    .select("*")
+    .order("tanggal", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const list = document.getElementById("tx-list");
+  if (!recent || recent.length === 0) {
+    list.innerHTML = `<div class="sub">Belum ada transaksi.</div>`;
+    return;
+  }
+  list.innerHTML = recent.map(r => {
+    const cls = r.tipe === "Pengeluaran" ? "amt-out" : (r.tipe === "Pemasukan" ? "amt-in" : "amt-save");
+    const sign = r.tipe === "Pengeluaran" ? "-" : "+";
+    return `
+      <div class="tx">
+        <div class="tx-main">
+          <div>${r.item}</div>
+          <div class="tx-cat">${r.kategori} · ${fmtDateIndo(r.tanggal)}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="tx-amt ${cls}">${sign}${fmtRp(r.jumlah)}</div>
+          <button class="btn-link" onclick="openEditModal('${r.id}')">✎</button>
+          <button class="btn-link" onclick="deleteTransaksi('${r.id}')">✕</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+async function addTransaksi() {
+  const errEl = document.getElementById("form-err");
+  errEl.textContent = "";
+
+  const tanggal = document.getElementById("f-tanggal").value;
+  const item = document.getElementById("f-item").value.trim();
+  const kategori = document.getElementById("f-kategori").value;
+  const tipe = document.getElementById("f-tipe").value;
+  const rawJml = document.getElementById("f-jumlah").value;
+  const jumlah = parseRibuan(rawJml);
+  const catatan = document.getElementById("f-catatan").value.trim();
+
+  if (!tanggal || !item || !jumlah || jumlah <= 0) {
+    errEl.textContent = "Lengkapi tanggal, item, dan jumlah transaksi.";
+    return;
+  }
+
+  const { data: sess } = await sb.auth.getSession();
+  const userEmail = sess?.session?.user?.email || "anon";
+
+  const { error } = await sb.from("transaksi").insert({
+    tanggal, item, kategori, tipe, jumlah, catatan: catatan || null, created_by: userEmail
+  });
+
+  if (error) {
+    errEl.textContent = "Gagal menyimpan: " + error.message;
+    return;
+  }
+
+  document.getElementById("f-item").value = "";
+  document.getElementById("f-jumlah").value = "";
+  document.getElementById("f-catatan").value = "";
+
+  await refreshAllData();
+}
+
+async function deleteTransaksi(id) {
+  if (!confirm("Hapus transaksi ini?")) return;
+  const { error } = await sb.from("transaksi").delete().eq("id", id);
+  if (error) alert("Gagal menghapus: " + error.message);
+  else refreshAllData();
+}
+
+// ---------- TAB ANGGARAN ----------
+function getAnggaranRows() {
+  const groups = {};
+  MASTER_KATEGORI.forEach(k => {
+    if (!k.kelompok_anggaran) return;
+    if (!groups[k.kelompok_anggaran]) groups[k.kelompok_anggaran] = [];
+    groups[k.kelompok_anggaran].push(k.nama);
+  });
+  return Object.keys(groups).map(label => ({ label, kategoris: groups[label] }));
+}
+
+async function loadAnggaranTab() {
+  if (!SELECTED_PERIOD) SELECTED_PERIOD = ACTIVE_PERIOD;
+  updatePeriodSelects();
+
+  const start = SELECTED_PERIOD ? SELECTED_PERIOD.mulai : getTodayStr();
+  const end = SELECTED_PERIOD ? SELECTED_PERIOD.selesai : getTodayStr();
+
+  document.getElementById("anggaran-period-info").textContent = 
+    `Rentang: ${fmtDateIndo(start)} s/d ${fmtDateIndo(end)} (${SELECTED_PERIOD?.is_berjalan ? "Siklus Berjalan" : "Arsip Periode"})`;
+
+  const [{ data: anggaranRows }, { data: pemasukanRows }, { data: targetRow }, { data: pengRows }, { data: inRows }, { data: investRows }] = await Promise.all([
+    sb.from("anggaran").select("*"),
+    sb.from("pemasukan_rutin").select("*").order("sumber"),
+    sb.from("target_saving").select("*").eq("id", 1).maybeSingle(),
+    sb.from("transaksi").select("kategori, jumlah").eq("tipe", "Pengeluaran").gte("tanggal", start).lte("tanggal", end),
+    sb.from("transaksi").select("jumlah").eq("tipe", "Pemasukan").gte("tanggal", start).lte("tanggal", end),
+    sb.from("transaksi").select("jumlah").or("tipe.eq.Saving/Invest,kategori.eq.Invest").gte("tanggal", start).lte("tanggal", end)
+  ]);
+
+  const budgetMap = {};
+  (anggaranRows || []).forEach(r => budgetMap[r.kategori] = Number(r.budget));
+
+  const realisasiPerKategori = {};
+  (pengRows || []).forEach(r => {
+    realisasiPerKategori[r.kategori] = (realisasiPerKategori[r.kategori] || 0) + Number(r.jumlah);
+  });
+
+  let totalBudget = 0, totalRealisasi = 0;
+  const body = document.getElementById("anggaran-body");
+  
+  body.innerHTML = getAnggaranRows().map(row => {
+    const budget = budgetMap[row.label] || 0;
+    const realisasi = row.kategoris.reduce((s, k) => s + (realisasiPerKategori[k] || 0), 0);
+    const sisa = budget - realisasi;
+    const pct = budget > 0 ? Math.min(100, Math.round((realisasi / budget) * 100)) : (realisasi > 0 ? 100 : 0);
+    const over = realisasi > budget && budget > 0;
+    totalBudget += budget; totalRealisasi += realisasi;
+    return `
+      <tr>
+        <td>
+          <div style="font-weight:600;">${row.label}</div>
+          <div class="bar-bg"><div class="bar-fill ${over ? "over" : ""}" style="width:${pct}%"></div></div>
+        </td>
+        <td><input class="budget-input" type="number" value="${budget}" onchange="updateBudget('${row.label}', this.value)" /></td>
+        <td class="${over ? "amt-out" : ""}">${fmtRp(realisasi)}</td>
+        <td class="${sisa < 0 ? "amt-out" : ""}" style="font-weight:600;">${fmtRp(sisa)}</td>
+      </tr>`;
+  }).join("") + `
+    <tr style="font-weight:700; background:#f8fafc;">
+      <td>TOTAL</td><td>${fmtRp(totalBudget)}</td><td>${fmtRp(totalRealisasi)}</td><td>${fmtRp(totalBudget - totalRealisasi)}</td>
+    </tr>`;
+
+  // Summary box
+  let totalMasuk = (inRows || []).reduce((s, r) => s + Number(r.jumlah || 0), 0);
+  let totalInvest = (investRows || []).reduce((s, r) => s + Number(r.jumlah || 0), 0);
+
+  document.getElementById("ang-pemasukan").textContent = fmtRp(totalMasuk);
+  document.getElementById("ang-pengeluaran").textContent = fmtRp(totalRealisasi);
+  document.getElementById("ang-ditabung").textContent = fmtRp(totalInvest);
+  document.getElementById("ang-sisa").textContent = fmtRp(totalMasuk - totalRealisasi - totalInvest);
+  document.getElementById("ang-rasio").textContent = totalMasuk > 0 ? Math.round((totalInvest / totalMasuk) * 100) + "%" : "0%";
+
+  // Status Surplus / Defisit Periode Terpilih
+  const netAng = totalMasuk - totalRealisasi;
+  const isSurplusAng = netAng >= 0;
+  const aBox = document.getElementById("ang-surplus-box");
+  const aLbl = document.getElementById("ang-surplus-label");
+  const aVal = document.getElementById("ang-surplus-val");
+  const aDesc = document.getElementById("ang-surplus-desc");
+  if (aBox && aLbl && aVal) {
+    if (isSurplusAng) {
+      aBox.style.background = "#e8f5ec";
+      aBox.style.borderColor = "#bbf7d0";
+      aLbl.style.color = "#14532d";
+      aLbl.textContent = "🟢 SURPLUS ARUS KAS PERIODE";
+      aVal.style.color = "#14532d";
+      aVal.textContent = "+" + fmtRp(netAng);
+      if (aDesc) aDesc.textContent = `Pemasukan (${fmtRp(totalMasuk)}) > Pengeluaran (${fmtRp(totalRealisasi)})`;
+    } else {
+      aBox.style.background = "#fde8e8";
+      aBox.style.borderColor = "#fecaca";
+      aLbl.style.color = "#7f1d1d";
+      aLbl.textContent = "🔴 DEFISIT / MINUS PERIODE";
+      aVal.style.color = "#7f1d1d";
+      aVal.textContent = "-" + fmtRp(Math.abs(netAng));
+      if (aDesc) aDesc.textContent = `Pengeluaran (${fmtRp(totalRealisasi)}) > Pemasukan (${fmtRp(totalMasuk)})`;
+    }
+  }
+
+  // Pemasukan rutin list
+  const pList = document.getElementById("pemasukan-list");
+  pList.innerHTML = (pemasukanRows || []).map(r => `
+    <div class="tx">
+      <div class="tx-main">${r.sumber}</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div class="tx-amt amt-in">${fmtRp(r.jumlah)}</div>
+        <button class="btn-link" onclick="deletePemasukan('${r.id}')">✕</button>
+      </div>
+    </div>
+  `).join("") || `<div class="sub">Belum ada pemasukan rutin.</div>`;
+
+  if (targetRow) {
+    document.getElementById("target-saving").value = targetRow.target || 0;
+  }
+  document.getElementById("target-realisasi").textContent = fmtRp(totalInvest);
+}
+
+async function updateBudget(kategori, val) {
+  const budget = parseFloat(val) || 0;
+  await sb.from("anggaran").upsert({ kategori, budget });
+  loadAnggaranTab();
+}
+
+async function updateTargetSaving() {
+  const target = parseFloat(document.getElementById("target-saving").value) || 0;
+  await sb.from("target_saving").upsert({ id: 1, target });
+}
+
+async function addPemasukan() {
+  const sumber = document.getElementById("new-sumber").value.trim();
+  const jumlah = parseFloat(document.getElementById("new-jumlah-masuk").value);
+  if (!sumber || !jumlah) return;
+  await sb.from("pemasukan_rutin").insert({ sumber, jumlah });
+  document.getElementById("new-sumber").value = "";
+  document.getElementById("new-jumlah-masuk").value = "";
+  loadAnggaranTab();
+}
+
+async function deletePemasukan(id) {
+  await sb.from("pemasukan_rutin").delete().eq("id", id);
+  loadAnggaranTab();
+}
+
+// ---------- TAB TRANSAKSI ----------
+function setTxFilterPeriod(type) {
+  if (type === "active" && ACTIVE_PERIOD) {
+    document.getElementById("tx-filter-dari").value = ACTIVE_PERIOD.mulai;
+    document.getElementById("tx-filter-sampai").value = ACTIVE_PERIOD.selesai;
+  } else if (type === "month") {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+    document.getElementById("tx-filter-dari").value = start;
+    document.getElementById("tx-filter-sampai").value = end;
+  } else {
+    document.getElementById("tx-filter-dari").value = "";
+    document.getElementById("tx-filter-sampai").value = "";
+  }
+  loadTransaksiTab();
+}
+
+async function loadTransaksiTab() {
+  const dari = document.getElementById("tx-filter-dari").value;
+  const sampai = document.getElementById("tx-filter-sampai").value;
+  const kategori = document.getElementById("tx-filter-kategori").value;
+  const tipe = document.getElementById("tx-filter-tipe").value;
+  const q = document.getElementById("tx-filter-search").value.trim();
+
+  let query = sb.from("transaksi").select("*")
+    .order("tanggal", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (dari) query = query.gte("tanggal", dari);
+  if (sampai) query = query.lte("tanggal", sampai);
+  if (kategori) query = query.eq("kategori", kategori);
+  if (tipe) query = query.eq("tipe", tipe);
+  if (q) query = query.ilike("item", `%${q}%`);
+
+  const { data, error } = await query.limit(300);
+  const countEl = document.getElementById("tx-full-count");
+  if (error) { countEl.textContent = "Gagal memuat: " + error.message; return; }
+  countEl.textContent = `${data?.length || 0} transaksi ditemukan`;
+
+  const list = document.getElementById("tx-full-list");
+  if (!data || data.length === 0) {
+    list.innerHTML = `<div class="sub">Tidak ada transaksi yang cocok.</div>`;
+    return;
+  }
+  list.innerHTML = data.map(r => {
+    const cls = r.tipe === "Pengeluaran" ? "amt-out" : (r.tipe === "Pemasukan" ? "amt-in" : "amt-save");
+    const sign = r.tipe === "Pengeluaran" ? "-" : "+";
+    return `
+      <div class="tx">
+        <div class="tx-main">
+          <div style="font-weight:600;">${r.item}</div>
+          <div class="tx-cat">${r.kategori} · ${r.tipe} · ${fmtDateIndo(r.tanggal)}</div>
+          ${r.created_by ? `<div class="tx-user">oleh ${r.created_by}</div>` : ''}
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="tx-amt ${cls}">${sign}${fmtRp(r.jumlah)}</div>
+          <button class="btn-link" onclick="openEditModal('${r.id}')">✎</button>
+          <button class="btn-link" onclick="deleteTransaksi('${r.id}')">✕</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function resetTxFilter() {
+  document.getElementById("tx-filter-dari").value = "";
+  document.getElementById("tx-filter-sampai").value = "";
+  document.getElementById("tx-filter-kategori").value = "";
+  document.getElementById("tx-filter-tipe").value = "";
+  document.getElementById("tx-filter-search").value = "";
+  loadTransaksiTab();
+}
+
+// ---------- EDIT MODAL ----------
+let editingId = null;
+async function openEditModal(id) {
+  const { data: row } = await sb.from("transaksi").select("*").eq("id", id).single();
+  if (!row) return;
+  editingId = id;
+  document.getElementById("e-tanggal").value = row.tanggal;
+  document.getElementById("e-item").value = row.item;
+  document.getElementById("e-kategori").value = row.kategori;
+  document.getElementById("e-tipe").value = row.tipe;
+  document.getElementById("e-jumlah").value = row.jumlah;
+  document.getElementById("e-catatan").value = row.catatan || "";
+  document.getElementById("edit-err").textContent = "";
+  document.getElementById("edit-modal").classList.add("active");
+}
+
+function closeEditModal() {
+  document.getElementById("edit-modal").classList.remove("active");
+  editingId = null;
+}
+
+async function saveEditTransaksi() {
+  const errEl = document.getElementById("edit-err");
+  errEl.textContent = "";
+  const tanggal = document.getElementById("e-tanggal").value;
+  const item = document.getElementById("e-item").value.trim();
+  const kategori = document.getElementById("e-kategori").value;
+  const tipe = document.getElementById("e-tipe").value;
+  const jumlah = parseFloat(document.getElementById("e-jumlah").value);
+  const catatan = document.getElementById("e-catatan").value.trim();
+
+  if (!tanggal || !item || !jumlah || jumlah <= 0) {
+    errEl.textContent = "Isi tanggal, item, dan jumlah dengan benar.";
+    return;
+  }
+  const { error } = await sb.from("transaksi").update({
+    tanggal, item, kategori, tipe, jumlah, catatan: catatan || null
+  }).eq("id", editingId);
+
+  if (error) { errEl.textContent = error.message; return; }
+  closeEditModal();
+  refreshAllData();
+}
+
+// ---------- DASHBOARD & CHARTS ----------
+let chartTrend = null, chartPie = null, chartBar = null;
+
+async function loadDashboardTab() {
+  // Tren 6 bulan
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      year: d.getFullYear(),
+      month: d.getMonth(),
+      label: BULAN_ID[d.getMonth()].slice(0, 3) + " " + d.getFullYear()
+    });
+  }
+
+  const rangeStart = new Date(months[0].year, months[0].month, 1).toISOString().slice(0, 10);
+  const rangeEnd = new Date(months[5].year, months[5].month + 1, 1).toISOString().slice(0, 10);
+
+  const { data: trendData } = await sb.from("transaksi")
+    .select("kategori, tipe, jumlah, tanggal")
+    .gte("tanggal", rangeStart)
+    .lt("tanggal", rangeEnd);
+
+  const outByMonth = new Array(6).fill(0);
+  const saveByMonth = new Array(6).fill(0);
+
+  (trendData || []).forEach(r => {
+    const d = new Date(r.tanggal);
+    const idx = months.findIndex(m => m.year === d.getFullYear() && m.month === d.getMonth());
+    if (idx < 0) return;
+    if (r.tipe === "Pengeluaran") outByMonth[idx] += Number(r.jumlah);
+    if (r.tipe === "Saving/Invest" || r.kategori === "Invest") saveByMonth[idx] += Number(r.jumlah);
+  });
+
+  if (chartTrend) chartTrend.destroy();
+  chartTrend = new Chart(document.getElementById("chart-trend"), {
+    type: "line",
+    data: {
+      labels: months.map(m => m.label),
+      datasets: [
+        { label: "Pengeluaran", data: outByMonth, borderColor: "#c0392b", backgroundColor: "rgba(192,57,43,0.15)", tension: 0.3, fill: true },
+        { label: "Saving/Invest", data: saveByMonth, borderColor: "#2f6f4f", backgroundColor: "rgba(47,111,79,0.15)", tension: 0.3, fill: true }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom" } },
+      scales: { y: { ticks: { callback: v => fmtRp(v) } } }
+    }
+  });
+
+  // Periode terpilih pie & bar
+  const start = SELECTED_PERIOD ? SELECTED_PERIOD.mulai : getTodayStr();
+  const end = SELECTED_PERIOD ? SELECTED_PERIOD.selesai : getTodayStr();
+
+  const [{ data: angRows }, { data: pengRows }] = await Promise.all([
+    sb.from("anggaran").select("*"),
+    sb.from("transaksi").select("kategori, jumlah").eq("tipe", "Pengeluaran").gte("tanggal", start).lte("tanggal", end)
+  ]);
+
+  const budgetMap = {};
+  (angRows || []).forEach(r => budgetMap[r.kategori] = Number(r.budget));
+
+  const realisasiMap = {};
+  (pengRows || []).forEach(r => { realisasiMap[r.kategori] = (realisasiMap[r.kategori] || 0) + Number(r.jumlah); });
+
+  const rows = getAnggaranRows().map(row => ({
+    label: row.label,
+    budget: budgetMap[row.label] || 0,
+    realisasi: row.kategoris.reduce((s, k) => s + (realisasiMap[k] || 0), 0)
+  })).filter(r => r.budget > 0 || r.realisasi > 0);
+
+  // Pie
+  if (chartPie) chartPie.destroy();
+  chartPie = new Chart(document.getElementById("chart-pie"), {
+    type: "doughnut",
+    data: {
+      labels: rows.filter(r => r.realisasi > 0).map(r => r.label),
+      datasets: [{ data: rows.filter(r => r.realisasi > 0).map(r => r.realisasi), backgroundColor: CHART_COLORS }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom" } }
+    }
+  });
+
+  // Bar
+  if (chartBar) chartBar.destroy();
+  chartBar = new Chart(document.getElementById("chart-bar"), {
+    type: "bar",
+    data: {
+      labels: rows.map(r => r.label),
+      datasets: [
+        { label: "Anggaran", data: rows.map(r => r.budget), backgroundColor: "#cbd5e1" },
+        { label: "Realisasi", data: rows.map(r => r.realisasi), backgroundColor: rows.map(r => r.realisasi > r.budget && r.budget > 0 ? "#c0392b" : "#2f6f4f") }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: "y",
+      plugins: { legend: { position: "bottom" } },
+      scales: { x: { ticks: { callback: v => fmtRp(v) } } }
+    }
+  });
+}
+
+// ---------- TAB RINGKASAN ----------
+async function loadRingkasanTab() {
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ year: d.getFullYear(), month: d.getMonth(), label: BULAN_ID[d.getMonth()] + " " + d.getFullYear() });
+  }
+
+  const rangeStart = new Date(months[0].year, months[0].month, 1).toISOString().slice(0, 10);
+  const rangeEnd = new Date(months[5].year, months[5].month + 1, 1).toISOString().slice(0, 10);
+
+  const { data: rows } = await sb.from("transaksi").select("kategori, tipe, jumlah, tanggal")
+    .gte("tanggal", rangeStart).lt("tanggal", rangeEnd);
+
+  const pivot = {};
+  KATEGORI_LIST.forEach(k => pivot[k] = new Array(6).fill(0));
+
+  (rows || []).forEach(r => {
+    const d = new Date(r.tanggal);
+    const idx = months.findIndex(m => m.year === d.getFullYear() && m.month === d.getMonth());
+    if (idx >= 0 && pivot[r.kategori]) pivot[r.kategori][idx] += Number(r.jumlah);
+  });
+
+  const totals = new Array(6).fill(0);
+  let html = "<thead><tr><th>Kategori</th>" + months.map(m => `<th>${m.label}</th>`).join("") + "<th>Total</th></tr></thead><tbody>";
+
+  KATEGORI_LIST.forEach(k => {
+    const vals = pivot[k];
+    const rowTotal = vals.reduce((a, b) => a + b, 0);
+    vals.forEach((v, i) => totals[i] += v);
+    if (rowTotal === 0) return;
+    html += `<tr><td>${k}</td>` + vals.map(v => `<td>${v ? fmtRp(v) : "-"}</td>`).join("") + `<td style="font-weight:700;">${fmtRp(rowTotal)}</td></tr>`;
+  });
+
+  const grandTotal = totals.reduce((a, b) => a + b, 0);
+  html += `<tr style="font-weight:700; background:#f8fafc;"><td>TOTAL</td>` + totals.map(v => `<td>${fmtRp(v)}</td>`).join("") + `<td>${fmtRp(grandTotal)}</td></tr>`;
+  html += "</tbody>";
+  document.getElementById("ringkasan-table").innerHTML = html;
+}
+
+// ---------- TAB MASTER DATA ----------
+function loadMasterTab() {
+  const body = document.getElementById("master-kategori-body");
+  body.innerHTML = MASTER_KATEGORI.map(k => `
+    <tr>
+      <td>${k.nama}</td>
+      <td><input class="budget-input" style="width:140px;" type="text" value="${k.kelompok_anggaran || ""}" placeholder="(tidak dianggarkan)" onchange="updateKategoriKelompok('${k.id}', this.value)" /></td>
+      <td><button class="btn-link" onclick="deleteKategori('${k.id}', '${k.nama.replace(/'/g, "\\'")}')">✕</button></td>
+    </tr>`).join("") || `<tr><td colspan="3" class="sub">Belum ada kategori.</td></tr>`;
+
+  const tipeList = document.getElementById("master-tipe-list");
+  tipeList.innerHTML = MASTER_TIPE.map(t => `
+    <div class="tx">
+      <div class="tx-main">${t.nama}</div>
+      <button class="btn-link" onclick="deleteTipe('${t.id}', '${t.nama.replace(/'/g, "\\'")}')">✕</button>
+    </div>`).join("") || `<div class="sub">Belum ada tipe.</div>`;
+}
+
+async function updateKategoriKelompok(id, val) {
+  await sb.from("master_kategori").update({ kelompok_anggaran: val.trim() || null }).eq("id", id);
+  await loadMasterData();
+}
+
+async function addKategori() {
+  const nama = document.getElementById("new-kategori-nama").value.trim();
+  const kelompok = document.getElementById("new-kategori-kelompok").value.trim();
+  if (!nama) return;
+  await sb.from("master_kategori").insert({ nama, kelompok_anggaran: kelompok || null, urutan: MASTER_KATEGORI.length + 1 });
+  document.getElementById("new-kategori-nama").value = "";
+  document.getElementById("new-kategori-kelompok").value = "";
+  await loadMasterData();
+  loadMasterTab();
+}
+
+async function deleteKategori(id, nama) {
+  if (!confirm(`Hapus kategori "${nama}"?`)) return;
+  await sb.from("master_kategori").delete().eq("id", id);
+  await loadMasterData();
+  loadMasterTab();
+}
+
+async function addTipe() {
+  const nama = document.getElementById("new-tipe-nama").value.trim();
+  if (!nama) return;
+  await sb.from("master_tipe").insert({ nama, urutan: MASTER_TIPE.length + 1 });
+  document.getElementById("new-tipe-nama").value = "";
+  await loadMasterData();
+  loadMasterTab();
+}
+
+async function deleteTipe(id, nama) {
+  if (!confirm(`Hapus tipe "${nama}"?`)) return;
+  await sb.from("master_tipe").delete().eq("id", id);
+  await loadMasterData();
+  loadMasterTab();
+}
+
+// ---------- COPY HELPERS (NETLIFY TAB) ----------
+function copyNetlifyToml() {
+  const content = `[build]
+  publish = "."
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200`;
+  navigator.clipboard.writeText(content);
+  alert("Isi file netlify.toml berhasil disalin!");
+}
+
+function copySqlPeriode() {
+  const sql = `-- Tabel Periode Anggaran
+create table if not exists pengaturan_periode (
+  id int primary key default 1,
+  mode text not null default 'auto_salary',
+  tanggal_gajian_tetap int not null default 25,
+  kata_kunci_gaji text not null default 'gaji,gajian,payroll,salary',
+  updated_at timestamptz not null default now()
+);`;
+  navigator.clipboard.writeText(sql);
+  alert("Script SQL disalin!");
+}
+
+// ---------- REFRESH ALL DATA ----------
+async function refreshAllData() {
+  const { data: allTx } = await sb.from("transaksi").select("*").order("tanggal", { ascending: false });
+  ALL_TRANSAKSI = allTx || [];
+  calculatePeriodsFromData();
+  loadInputTab();
+  if (document.getElementById("tab-periode").classList.contains("active")) loadPeriodeTab();
+  if (document.getElementById("tab-anggaran").classList.contains("active")) loadAnggaranTab();
+  if (document.getElementById("tab-transaksi").classList.contains("active")) loadTransaksiTab();
+  if (document.getElementById("tab-dashboard").classList.contains("active")) loadDashboardTab();
+}
+
+async function loadMasterData() {
+  const [{ data: kat }, { data: tipe }] = await Promise.all([
+    sb.from("master_kategori").select("*").order("urutan").order("nama"),
+    sb.from("master_tipe").select("*").order("urutan").order("nama")
+  ]);
+  MASTER_KATEGORI = kat || [];
+  MASTER_TIPE = tipe || [];
+  KATEGORI_LIST = MASTER_KATEGORI.map(k => k.nama);
+  TIPE_LIST = MASTER_TIPE.map(t => t.nama);
+
+  // Populate selects
+  document.getElementById("f-kategori").innerHTML = KATEGORI_LIST.map(k => `<option value="${k}">${k}</option>`).join("");
+  document.getElementById("f-tipe").innerHTML = TIPE_LIST.map(t => `<option value="${t}">${t}</option>`).join("");
+  document.getElementById("e-kategori").innerHTML = KATEGORI_LIST.map(k => `<option value="${k}">${k}</option>`).join("");
+  document.getElementById("e-tipe").innerHTML = TIPE_LIST.map(t => `<option value="${t}">${t}</option>`).join("");
+
+  const kFilter = document.getElementById("tx-filter-kategori");
+  const tFilter = document.getElementById("tx-filter-tipe");
+  if (kFilter) kFilter.innerHTML = `<option value="">Semua kategori</option>` + KATEGORI_LIST.map(k => `<option value="${k}">${k}</option>`).join("");
+  if (tFilter) tFilter.innerHTML = `<option value="">Semua tipe</option>` + TIPE_LIST.map(t => `<option value="${t}">${t}</option>`).join("");
+}
+
+// ---------- AUTH & SESSION ----------
+async function checkSession() {
+  const { data: sess } = await sb.auth.getSession();
+  const user = sess?.session?.user;
+  const whoami = document.getElementById("whoami");
+  if (user) {
+    whoami.textContent = user.email;
+    document.getElementById("auth-panel").style.display = "none";
+    document.getElementById("app").style.display = "block";
+  } else {
+    // If not logged in, allow demo or prompt login
+    whoami.textContent = "Pengguna (Tamu)";
+    document.getElementById("auth-panel").style.display = "none";
+    document.getElementById("app").style.display = "block";
+  }
+
+  document.getElementById("f-tanggal").value = getTodayStr();
+  await loadMasterData();
+  await refreshAllData();
+}
+
+async function doLogin() {
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  const errEl = document.getElementById("login-err");
+  errEl.textContent = "";
+
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    errEl.textContent = "Gagal login: " + error.message;
+    return;
+  }
+  checkSession();
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  window.location.reload();
+}
+
+// Initialize
+checkSession();
+</script>
+</body>
+</html>

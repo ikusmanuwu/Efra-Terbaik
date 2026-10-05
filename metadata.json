@@ -1,0 +1,6 @@
+{
+  "name": "Catatan Keuangan & Periode Anggaran",
+  "description": "Aplikasi pencatatan keuangan harian, pelacakan anggaran berbasis periode siklus gajian, dan dashboard realisasi terintegrasi Supabase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
